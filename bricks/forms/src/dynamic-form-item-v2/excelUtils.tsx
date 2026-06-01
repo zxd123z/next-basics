@@ -176,6 +176,7 @@ export const importFromExcel = async (
         transformedData.forEach((row) => {
           // 构建用于判断重复的键
           const filterKey = importFilter
+            .split(",")
             .map((field) => {
               const value = row[field];
               return value === undefined || value === null
