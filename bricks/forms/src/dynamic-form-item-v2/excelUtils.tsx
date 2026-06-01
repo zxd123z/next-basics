@@ -62,7 +62,7 @@ export const exportFormData = async (
 export const importFromExcel = async (
   file: File,
   columns: Column[],
-  importFilter?: string[]
+  importFilter?: string
 ): Promise<Record<string, any>[]> => {
   // sha1 hash of "dynamic-form-item-v2" starts with "015f"
   const { utils: XLSXUtils, read: XLSXRead } = await import(
@@ -110,7 +110,66 @@ export const importFromExcel = async (
       });
 
       // 如果提供了ImportFilter，则根据指定字段进行去重
+      // ========== 新增：根据 importFilter 字段的 options 进行过滤 ==========
       if (importFilter && importFilter.length > 0) {
+        // 构建字段配置映射
+        const filterFieldConfigs = importFilter
+          .split(",")
+          .map((fieldName) => {
+            const column = columns.find((col) => col.name === fieldName);
+            if (!column) {
+              return null;
+            }
+
+            // 获取 options 列表
+            let options: any[] = [];
+            if (column.type === "select" && column.props?.options) {
+              options = Array.isArray(column.props.options)
+                ? column.props.options
+                : [];
+            }
+
+            return {
+              fieldName,
+              column,
+              options,
+            };
+          })
+          .filter((config) => config !== null);
+
+        // 第一步：根据 options 过滤无效数据
+        transformedData = transformedData.filter((row) => {
+          // 检查所有 filter 字段
+          for (const config of filterFieldConfigs) {
+            const value = row[config.fieldName];
+
+            // 如果值为空，保留该行（允许空值）
+            if (value === undefined || value === null || value === "") {
+              continue;
+            }
+
+            // 如果 options 为空数组，不过滤（允许所有值）
+            if (config.options.length === 0) {
+              continue;
+            }
+
+            // 检查 value 是否在 options 中
+            const isValid = config.options.some((option) => {
+              // 支持不同的 option 结构
+              const optionValue =
+                option.value !== undefined ? option.value : option;
+              return String(optionValue) === String(value);
+            });
+
+            // 如果值不在 options 中，过滤掉该行
+            if (!isValid) {
+              return false;
+            }
+          }
+          return true;
+        });
+
+        // 第二步：根据 importFilter 字段组合进行去重
         const uniqueData: Record<string, any>[] = [];
         const seen = new Set<string>();
 
